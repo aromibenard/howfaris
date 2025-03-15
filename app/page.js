@@ -43,6 +43,16 @@ function getDistanceInKilometres(lat1, lon1, lat2, lon2) {
   return R * c; // Distance in kilometers
 }
 
+async function getWeatherData(lat, lon) {
+  const apiKey = process.env.NEXT_PUBLIC_OPEN_WEATHER_API_KEY
+  const response = await fetch(
+    `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${apiKey}&units=metric`
+  )
+  const data = await response.json()
+  console.log(data)
+  return data
+}
+
 export default function Home() { 
   const [query, setQuery] = useState('')
   const [suggestions, setSuggestions] = useState([])
@@ -51,17 +61,22 @@ export default function Home() {
   const [currentLatitude, setCurrentLatitude] = useState(null)
   const [currentLongitude, setCurrentLongitude] = useState(null)
   const [distance, setDistance] = useState(null)
-
+  const [weatherData, setWeatherData] = useState(null)
   const accessToken = process.env.NEXT_PUBLIC_ACCESS_TOKEN
-
-  useEffect(() => {
-    const controller = new AbortController();
-    const { signal } = controller;
+  const iconUrl = `http://openweathermap.org/img/wn/${weatherData?.weather[0].icon}.png`
+  const localTime = weatherData
+    ? new Date((weatherData.dt + weatherData.timezone) * 1000).toLocaleTimeString([], { timeStyle: 'short' })
+    : null
+  
+    useEffect(() => {
+    const controller = new AbortController()
+    const { signal } = controller
 
     const getSuggestions = async (searchText) => {
       if (!searchText || searchText === selectedLocation?.name) {
-        setSuggestions([]);
-        return;
+        setSuggestions([])
+        // setQuery('')
+        return
       }
 
       try {
@@ -71,7 +86,7 @@ export default function Home() {
           types: 'place,address,poi',
           autocomplete: 'true',
           limit: '4',
-        });
+        })
 
         const response = await fetch(
           `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(
@@ -101,7 +116,7 @@ export default function Home() {
       } else {
         setSuggestions([])
       }
-    }, 300);
+    }, 300)
 
     return () => {
       controller.abort();
@@ -140,8 +155,19 @@ export default function Home() {
     getDistance()
   },[selectedLocation, currentLatitude, currentLongitude])
 
+  useEffect(() => {
+    const fetchWeatherData = async () => {
+      if (selectedLocation) {
+        const data = await getWeatherData(selectedLocation.coordinates[1], selectedLocation.coordinates[0])
+        setWeatherData(data)
+      }
+    }
+    fetchWeatherData()
+  }, [selectedLocation])
+
+  // jsx
   return (
-    <div className="md:max-w-5xl w-dvw flex flex-col space-y-3  pt-4 md:pt-[8rem]">
+    <div className="md:max-w-5xl w-dvw flex flex-col space-y-4  py-2 md:pt-[8rem] px-4 mx-auto">
       <h1 className="relative mx-auto">
         How far is {selectedLocation ? selectedLocation.name : query}
       </h1>
@@ -172,30 +198,53 @@ export default function Home() {
           </ul>
         )}
       </div>
-      <div className="flex space-x-2">
-        {selectedLocation && (
-          <div className="mt-4 p-4  rounded-md">
-            <h3 className="font-semibold mb-2">Selected Location:</h3>
-            <p className="text-sm">
-              <span className="font-medium">Name:</span> {selectedLocation.name}
-            </p>
-            <p className="text-sm">
-              <span className="font-medium">Latitude:</span> {selectedLocation.coordinates[1]}
-            </p>
-            <p className="text-sm">
-              <span className="font-medium">Longitude:</span> {selectedLocation.coordinates[0]}
-            </p>
-          </div>
-        )}
-        <div className="p-1">
-          🙂
-        </div>
-      </div>
+      
       {distance && (
-        <div>
-          {`Approximately ${distance.toFixed(2)} km😗`}
+        <div className="my-4 relative mx-auto">
+          <p>Approximately <span className="text-extrabold text-orange-500">{distance.toFixed(2)}</span> km</p>
         </div>
       )}
+
+      <div className="flex space-x-2 rounded-md p-1 w-full">
+        {selectedLocation && (
+          <div className=" rounded-md border w-1/2">
+            <div className=" border-b p-1.5 bg-slate-50/10">
+              <p className="flex space-x-1">
+                <span className="mx-1">📍</span>
+                {addEllipsis(selectedLocation.name, 21)}</p>
+            </div>
+            <div className="p-2">
+              <p>Latitude: {selectedLocation.coordinates[1]}</p>
+              <p>Longitude: {selectedLocation.coordinates[0]}</p>
+            </div>
+          </div>
+        )}
+        {selectedLocation && weatherData && (
+          <div className="border w-1/2 rounded-md" >
+            <div className="border-b bg-slate-50/10 p-1.5"> 
+              <p className="flex items-center"><span className="mx-2">
+                <img src={iconUrl} className="h-[27px] w-[27px]"/></span>Current Weather</p>
+            </div>
+            <div className="p-2">
+              <p>Local Time: {localTime}</p>
+              <p>Weather: {weatherData.weather[0].description}</p>
+              <p className="flex space-x-1">Temp: {weatherData.main.temp}°C</p>
+              <p className="flex space-x-1">
+                <span className="">💧</span>
+                {weatherData.main.humidity}%<span></span></p>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
-  );
+  )
+}
+
+// utils
+function addEllipsis(str, length) {
+  return str.length > length ? str.substring(0, length) + "..." : str;
+}
+
+function getDistanceInMiles(lat1, lon1, lat2, lon2) {
+  return getDistanceInKilometres(lat1, lon1, lat2, lon2) * 0.621371
 }
